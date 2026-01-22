@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Remote Opener</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 3s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Libraries -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .input-dark {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+        .input-dark:focus {
+            border-color: #38bdf8;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 selection:bg-brand-500 selection:text-white">
+
+    <!-- Background Elements -->
+    <div class="fixed inset-0 -z-10 overflow-hidden pointer-events-none">
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-brand-500/20 rounded-full blur-3xl animate-pulse-slow"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500/20 rounded-full blur-3xl animate-pulse-slow" style="animation-delay: 1.5s;"></div>
+    </div>
+
+    <!-- Main Container -->
+    <main class="w-full max-w-md glass-panel rounded-3xl p-8 shadow-2xl relative overflow-hidden">
+        
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold tracking-tight mb-2 gradient-text">Remote Link Opener</h1>
+            <p class="text-slate-400 text-sm" id="status-text">Initializing...</p>
+        </header>
+
+        <!-- View: Desktop (Receiver) -->
+        <div id="desktop-view" class="hidden flex-col items-center animate-float">
+            <div class="relative group">
+                <div class="absolute -inset-1 bg-gradient-to-r from-brand-400 to-purple-600 rounded-xl blur opacity-25 group-hover:opacity-75 transition duration-1000 group-hover:duration-200"></div>
+                <div class="relative bg-white p-4 rounded-xl shadow-inner">
+                    <div id="qrcode"></div>
+                </div>
+            </div>
+            
+            <p class="mt-8 text-center text-slate-300 text-sm px-4 leading-relaxed">
+                Scan this QR code with your phone to connect.<br>
+                <span class="text-brand-400 font-medium">Keep this tab open.</span>
+            </p>
+            
+            <div id="connection-status" class="mt-6 flex items-center space-x-2 text-xs font-medium text-slate-500 bg-slate-800/50 py-2 px-4 rounded-full">
+                <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                <span>Waiting for connection...</span>
+            </div>
+        </div>
+
+        <!-- View: Mobile (Sender) -->
+        <div id="mobile-view" class="hidden w-full space-y-6">
+            <div class="space-y-2">
+                <label for="url-input" class="text-sm font-medium text-slate-300 ml-1">Enter Link</label>
+                <div class="relative">
+                    <input type="url" id="url-input" placeholder="https://example.com" 
+                        class="w-full p-4 rounded-xl input-dark transition-all placeholder:text-slate-600"
+                        autocomplete="off">
+                    <button id="paste-btn" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-white transition-colors" title="Paste from Clipboard">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                    </button>
+                </div>
+            </div>
+
+            <button id="send-btn" class="w-full py-4 bg-gradient-to-r from-brand-500 to-brand-600 hover:from-brand-400 hover:to-brand-500 text-white rounded-xl font-semibold shadow-lg shadow-brand-500/25 transition-all transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                Open on PC
+            </button>
+
+            <div id="mobile-status" class="text-center text-xs text-slate-500 mt-4">
+                Connecting to host...
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="fixed bottom-4 text-center w-full text-slate-600 text-[10px] uppercase tracking-widest pointer-events-none">
+        Secure P2P Connection • PeerJS
+    </footer>
+
+    <!-- Logic -->
+    <script>
+        // DOM Elements
+        const desktopView = document.getElementById('desktop-view');
+        const mobileView = document.getElementById('mobile-view');
+        const statusText = document.getElementById('status-text');
+        const qrcodeContainer = document.getElementById('qrcode');
+        const connectionStatus = document.getElementById('connection-status');
+        const urlInput = document.getElementById('url-input');
+        const sendBtn = document.getElementById('send-btn');
+        const pasteBtn = document.getElementById('paste-btn');
+        const mobileStatus = document.getElementById('mobile-status');
+
+        // State
+        let peer = null;
+        let conn = null;
+        const urlParams = new URLSearchParams(window.location.search);
+        const remotePeerId = urlParams.get('remote');
+
+        // Helper: Show View
+        function showView(viewName) {
+            if (viewName === 'desktop') {
+                desktopView.classList.remove('hidden');
+                desktopView.classList.add('flex');
+                mobileView.classList.add('hidden');
+                statusText.innerText = "Desktop Host";
+            } else {
+                mobileView.classList.remove('hidden');
+                desktopView.classList.add('hidden');
+                desktopView.classList.remove('flex');
+                statusText.innerText = "Mobile Controller";
+            }
+        }
+
+        // --- Logic: Desktop (Host) ---
+        function initDesktop() {
+            showView('desktop');
+            
+            // Initialize Peer
+            peer = new Peer(null, {
+                debug: 2
+            });
+
+            peer.on('open', (id) => {
+                console.log('My peer ID is: ' + id);
+                
+                // Create Access URL
+                const currentUrl = window.location.href.split('?')[0];
+                const accessUrl = `${currentUrl}?remote=${id}`;
+                
+                // Generate QR Code
+                qrcodeContainer.innerHTML = '';
+                new QRCode(qrcodeContainer, {
+                    text: accessUrl,
+                    width: 180,
+                    height: 180,
+                    colorDark : "#0f172a",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
+                });
+
+                statusText.innerText = "Ready to pair";
+            });
+
+            peer.on('connection', (c) => {
+                conn = c;
+                console.log("Connected to: " + conn.peer);
+                
+                // Update UI on connection
+                connectionStatus.innerHTML = `
+                    <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span class="text-green-400">Device Connected!</span>
+                `;
+                connectionStatus.classList.replace('bg-slate-800/50', 'bg-green-900/20');
+
+                // Receive Data
+                conn.on('data', (data) => {
+                    console.log('Received:', data);
+                    if (data.link) {
+                        let url = data.link;
+                        if (!/^https?:\/\//i.test(url)) {
+                            url = 'https://' + url;
+                        }
+                        
+                        // Show visual feedback
+                        const originalText = statusText.innerText;
+                        statusText.innerText = `Opening ${data.link}...`;
+                        setTimeout(() => statusText.innerText = originalText, 2000);
+
+                        window.open(url, '_blank');
+                    }
+                });
+
+                conn.on('close', () => {
+                    connectionStatus.innerHTML = `
+                        <span class="w-2 h-2 rounded-full bg-yellow-500 animate-pulse"></span>
+                        <span>Waiting for connection...</span>
+                    `;
+                    connectionStatus.classList.replace('bg-green-900/20', 'bg-slate-800/50');
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                statusText.innerText = "Connection Error";
+                statusText.classList.add('text-red-400');
+            });
+        }
+
+        // --- Logic: Mobile (Client) ---
+        function initMobile() {
+            showView('mobile');
+            sendBtn.disabled = true;
+
+            // Initialize Peer
+            peer = new Peer(null, {
+                debug: 2
+            });
+
+            peer.on('open', (id) => {
+                console.log('My ID: ' + id);
+                // Connect to Host
+                conn = peer.connect(remotePeerId);
+
+                conn.on('open', () => {
+                    console.log("Connected to host");
+                    mobileStatus.innerText = "Connected to Desktop via Secure P2P";
+                    mobileStatus.classList.add('text-green-500');
+                    sendBtn.disabled = false;
+                    sendBtn.innerText = "Open on PC";
+                });
+
+                conn.on('close', () => {
+                    mobileStatus.innerText = "Connection lost";
+                    mobileStatus.classList.remove('text-green-500');
+                    sendBtn.disabled = true;
+                });
+                
+                conn.on('error', (err) => {
+                     mobileStatus.innerText = "Connection failed";
+                });
+            });
+
+            peer.on('error', (err) => {
+                console.error(err);
+                mobileStatus.innerText = "Error: " + err.type;
+            });
+
+            // Send Button
+            sendBtn.addEventListener('click', () => {
+                const link = urlInput.value.trim();
+                if (!link) return;
+
+                if (conn && conn.open) {
+                    conn.send({ link: link });
+                    
+                    // Button Feedback
+                    const originalText = sendBtn.innerText;
+                    sendBtn.innerText = "Sent!";
+                    sendBtn.classList.add('bg-green-600');
+                    setTimeout(() => {
+                        sendBtn.innerText = originalText;
+                        sendBtn.classList.remove('bg-green-600');
+                        urlInput.value = ''; // Clear input
+                    }, 1000);
+                }
+            });
+
+            // Paste Button
+            pasteBtn.addEventListener('click', async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    urlInput.value = text;
+                } catch (err) {
+                    console.error('Failed to read clipboard', err);
+                    alert("Please allow clipboard access or paste manually.");
+                }
+            });
+        }
+
+        // Initialization
+        if (remotePeerId) {
+            initMobile();
+        } else {
+            initDesktop();
+        }
+
+    </script>
+</body>
+</html>
